@@ -66,7 +66,7 @@ with Diagram("Target Architecture (Observability Stack)", filename="image/archit
         otel = Custom("\n\nOpenTelemetry", get_img("opentelemetry.png")) if os.path.exists(get_img("opentelemetry.png")) else Server("\n\nOpenTelemetry")
 
     with Cluster("Ingestion Buffer", graph_attr=attr_buffer):
-        redpanda = Server("\n\nRedpanda Cluster")
+        redpanda = Custom("\n\nRedpanda Cluster", get_img("redpanda.png")) if os.path.exists(get_img("redpanda.png")) else Server("\n\nRedpanda Cluster")
 
     with Cluster("Storage & Query Backend (Hot/Warm)", graph_attr=attr_storage):
         vm = Custom("\n\nVictoriaMetrics", get_img("victoriametrics.png")) if os.path.exists(get_img("victoriametrics.png")) else Prometheus("\n\nVictoriaMetrics")
