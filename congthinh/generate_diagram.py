@@ -32,7 +32,8 @@ edge_attr = {
     "fontsize": "22",
     "fontname": "Sans-Serif bold",
     "color": "#1A202C",        # Mũi tên xám đậm rõ ràng
-    "penwidth": "3.0"          # Độ dày nét mũi tên lớn (3.0) giúp nhìn rất rõ
+    "penwidth": "3.0",         # Độ dày nét mũi tên lớn (3.0) giúp nhìn rất rõ
+    "arrowsize": "1.5"         # Kích thước đầu mũi tên lớn hơn (1.5) để không bị che khuất
 }
 
 def make_cluster_attr(title_size, bgcolor, border_color):
@@ -91,7 +92,7 @@ with Diagram("Target Architecture (Observability Stack)", filename="image/archit
     security = User("\nSecurity Team")
 
     def L(num, text):
-        return f"<<TABLE BORDER='0' CELLBORDER='0' CELLSPACING='0' CELLPADDING='6' BGCOLOR='white'><TR><TD ALIGN='CENTER'><B><FONT POINT-SIZE='32' COLOR='#d32f2f'>[{num}]</FONT></B><BR/><FONT POINT-SIZE='24' COLOR='#1A202C'>{text}</FONT></TD></TR></TABLE>>"
+        return f"<<TABLE BORDER='0' CELLBORDER='0' CELLSPACING='0' CELLPADDING='4' BGCOLOR='white'><TR><TD ALIGN='CENTER'><B><FONT POINT-SIZE='24' COLOR='#d32f2f'>[{num}]</FONT></B><BR/><FONT POINT-SIZE='16' COLOR='#1A202C'>{text}</FONT></TD></TR></TABLE>>"
 
     # Ingestion Flow (Left to Right)
     apps >> Edge(color="#8B5CF6", label=L("1a", "eBPF")) >> beyla
@@ -101,7 +102,7 @@ with Diagram("Target Architecture (Observability Stack)", filename="image/archit
     
     vector >> Edge(color="#10B981", label=L("2b", "Forward Logs")) >> redpanda
     otel >> Edge(color="#8B5CF6", label=L("2c", "Forward Telemetry")) >> redpanda
-    otel >> Edge(color="#6B7280", label=L("3d", "Audit Logs")) >> s3
+    otel >> Edge(color="#6B7280", label=L("3d", "Audit Logs"), minlen="3") >> s3
     
     redpanda >> Edge(color="#8B5CF6", label=L("3a", "Metrics")) >> vm
     redpanda >> Edge(color="#10B981", label=L("3b", "Logs")) >> loki
@@ -122,7 +123,7 @@ with Diagram("Target Architecture (Observability Stack)", filename="image/archit
     alertmanager >> Edge(color="#EF4444", label=L("5c", "Webhooks")) >> keep
     keep >> Edge(color="#059669", style="dashed", label=L("6", "Auto-Remediate")) >> apps
     keep >> Edge(color="#DC2626", label=L("7", "Escalate")) >> pd
-    pd >> Edge(color="#DC2626", label=L("7b", "Paging (Call/SMS)")) >> oncall
+    pd >> Edge(color="#DC2626", label=L("7b", "Paging (Call/SMS)"), minlen="3") >> oncall
     
     # Query Flow (Force Grafana to the Right, but arrows point back to Left)
     vm >> Edge(dir="back", color="#2563EB", style="dotted", label=L("8a", "Query Metrics")) >> grafana
@@ -130,9 +131,9 @@ with Diagram("Target Architecture (Observability Stack)", filename="image/archit
     tempo >> Edge(dir="back", color="#F59E0B", style="dotted", label=L("8c", "Query Traces")) >> grafana
     
     # Human & Audit Flow (Force to the far right)
-    grafana >> Edge(dir="back", label=L("9", "View Dashboards")) >> oncall
-    s3 >> Edge(dir="back", style="dotted", label=L("10", "SQL Query")) >> athena
-    athena >> Edge(dir="back", label=L("11", "Audit Review")) >> security
-    statuspage >> Edge(dir="back", label=L("12", "Update Status")) >> oncall
+    grafana >> Edge(dir="back", label=L("9", "View Dashboards"), minlen="3") >> oncall
+    s3 >> Edge(dir="back", style="dotted", label=L("10", "SQL Query"), minlen="3") >> athena
+    athena >> Edge(dir="back", label=L("11", "Audit Review"), minlen="3") >> security
+    statuspage >> Edge(dir="back", label=L("12", "Update Status"), minlen="3") >> oncall
 
 print("Diagram generated successfully as architecture-target.png")
