@@ -103,7 +103,7 @@ with Diagram("Target Architecture (Observability Stack)", filename="image/archit
     
     vector >> Edge(color="#10B981", label=L("2b", "Forward Logs")) >> redpanda
     otel >> Edge(color="#8B5CF6", label=L("2c", "Forward Telemetry")) >> redpanda
-    otel >> Edge(color="#6B7280", label=L("3d", "Audit Logs")) >> s3
+    otel >> Edge(color="#6B7280", label=L("3d", "Audit Logs"), constraint="false") >> s3
     
     redpanda >> Edge(color="#8B5CF6", label=L("3a", "Metrics")) >> vm
     redpanda >> Edge(color="#10B981", label=L("3b", "Logs")) >> loki
@@ -122,19 +122,19 @@ with Diagram("Target Architecture (Observability Stack)", filename="image/archit
     vm >> Edge(color="#EF4444", label=L("5a", "Alerts")) >> alertmanager
     loki >> Edge(color="#EF4444", label=L("5b", "Alerts")) >> alertmanager
     alertmanager >> Edge(color="#EF4444", label=L("5c", "Webhooks")) >> keep
-    keep >> Edge(color="#059669", style="dashed", label=L("6", "Auto-Remediate")) >> apps
+    keep >> Edge(color="#059669", style="dashed", label=L("6", "Auto-Remediate"), constraint="false") >> apps
     keep >> Edge(color="#DC2626", label=L("7", "Escalate")) >> pd
     pd >> Edge(color="#DC2626", label=L("7b", "Paging (Call/SMS)")) >> oncall
     
     # Query Flow (Force Grafana to the Right, but arrows point back to Left)
-    vm >> Edge(dir="back", color="#2563EB", style="dotted", label=L("8a", "Query Metrics")) >> grafana
-    loki >> Edge(dir="back", color="#10B981", style="dotted", label=L("8b", "Query Logs")) >> grafana
-    tempo >> Edge(dir="back", color="#F59E0B", style="dotted", label=L("8c", "Query Traces")) >> grafana
+    vm >> Edge(dir="back", color="#2563EB", style="dotted", label=L("8a", "Query Metrics"), constraint="false") >> grafana
+    loki >> Edge(dir="back", color="#10B981", style="dotted", label=L("8b", "Query Logs"), constraint="false") >> grafana
+    tempo >> Edge(dir="back", color="#F59E0B", style="dotted", label=L("8c", "Query Traces"), constraint="false") >> grafana
     
     # Human & Audit Flow (Force to the far right)
     grafana >> Edge(dir="back", label=L("9", "View Dashboards")) >> oncall
-    s3 >> Edge(dir="back", style="dotted", label=L("10", "SQL Query")) >> athena
+    s3 >> Edge(dir="back", style="dotted", label=L("10", "SQL Query"), constraint="false") >> athena
     athena >> Edge(dir="back", label=L("11", "Audit Review")) >> security
-    statuspage >> Edge(dir="back", label=L("12", "Update Status")) >> oncall
+    statuspage >> Edge(dir="back", label=L("12", "Update Status"), constraint="false") >> oncall
 
 print("Diagram generated successfully as architecture-target.png")
