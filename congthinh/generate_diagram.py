@@ -91,7 +91,7 @@ with Diagram("Target Architecture (Observability Stack)", filename="image/archit
     security = User("\nSecurity Team")
 
     def L(num, text):
-        return f"<<TABLE BORDER='1' CELLBORDER='0' CELLSPACING='0' CELLPADDING='4' BGCOLOR='white' COLOR='#CBD5E1' STYLE='ROUNDED'><TR><TD ALIGN='CENTER'><FONT POINT-SIZE='20' COLOR='#DC2626'><B>[{num}]</B></FONT> <FONT POINT-SIZE='16' COLOR='#1E293B'>{text}</FONT></TD></TR></TABLE>>"
+        return f"<<TABLE BORDER='0' CELLBORDER='0' CELLSPACING='0' CELLPADDING='6' BGCOLOR='white'><TR><TD ALIGN='CENTER'><B><FONT POINT-SIZE='32' COLOR='#d32f2f'>[{num}]</FONT></B><BR/><FONT POINT-SIZE='24' COLOR='#1A202C'>{text}</FONT></TD></TR></TABLE>>"
 
     # Ingestion Flow (Left to Right)
     apps >> Edge(color="#8B5CF6", label=L("1a", "eBPF")) >> beyla
@@ -107,13 +107,14 @@ with Diagram("Target Architecture (Observability Stack)", filename="image/archit
     redpanda >> Edge(color="#10B981", label=L("3b", "Logs")) >> loki
     redpanda >> Edge(color="#F59E0B", label=L("3c", "Traces")) >> tempo
     
-    # vmanomaly ML loop (Merged into a single bi-directional edge to prevent overlap)
-    vm >> Edge(color="#6366F1", style="dashed", dir="both", label=L("3e", "ML Loop (Pull/Push)")) >> vmanomaly
+    # vmanomaly ML loop
+    vm >> Edge(color="#6366F1", style="dashed", label=L("3e", "Pull Metrics")) >> vmanomaly
+    vmanomaly >> Edge(color="#6366F1", label=L("3f", "Push Scores")) >> vm
 
     # Archiving Flow
-    vm >> Edge(color="#4B5563", style="dashed", label=L("4a", "Archive Metrics")) >> s3
-    loki >> Edge(color="#4B5563", style="dashed", label=L("4b", "Archive Logs")) >> s3
-    tempo >> Edge(color="#4B5563", style="dashed", label=L("4c", "Archive Traces")) >> s3
+    vm >> Edge(color="#4B5563", style="dashed", label=L("4a", "Archive Blocks")) >> s3
+    loki >> Edge(color="#4B5563", style="dashed", label=L("4b", "Archive Chunks")) >> s3
+    tempo >> Edge(color="#4B5563", style="dashed", label=L("4c", "Archive Blocks")) >> s3
     
     # Alerting Flow (Left to Right)
     vm >> Edge(color="#EF4444", label=L("5a", "Alerts")) >> alertmanager
