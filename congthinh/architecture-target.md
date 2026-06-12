@@ -52,3 +52,98 @@ Dưới đây là chú thích chi tiết cho các luồng dữ liệu được �
 - **Human-facing Query Surface:** **Grafana Cloud** is the sole UI. On-call engineers use it to view dashboards, search logs, and examine traces without switching context.
 - **Color Coding:** Blue = In-house, Green = Self-hosted OSS, Orange = SaaS, Gray = Cloud Storage.
 
+---
+
+## Detailed Component Analysis: Role, Outage Impact, and Cascading Effects (Chi tiết vai trò, Tác động khi sập, và Ảnh hưởng dây chuyền)
+
+This section details the operational responsibility of each component, the immediate impact if it is missing or goes offline, and its cascading effect on other parts of the observability pipeline.
+
+### 1. Ingestion & Agent Tier (Tầng Thu thập)
+
+#### Grafana Beyla (eBPF APM)
+- **Role (Vai trò):** Captures HTTP/gRPC metrics and distributed traces at the Linux kernel level (using eBPF probes) without application source code modifications.
+- **Outage Impact (Tác động khi sập):** We lose all application performance monitoring (APM) metrics (p99 latency, request rates, HTTP errors).
+- **Cascading Effect (Ảnh hưởng dây chuyền):** The OTel Collector receives no traces/metrics for active services. VictoriaMetrics and Tempo remain empty of application telemetry. Grafana cannot draw service dependency graphs, leaving on-call SREs blind to inter-service latency bottlenecks.
+
+#### Vector (Log Agent)
+- **Role (Vai trò):** Collects system and application logs from host disk files, applies parsing/enrichment, drops debug noise, and routes logs to the Redpanda queue.
+- **Outage Impact (Tác động khi sập):** Log streams from the servers are interrupted.
+- **Cascading Effect (Ảnh hưởng dây chuyền):** Redpanda and Grafana Loki receive no log telemetry. Engineers cannot inspect exception stack traces during active incidents. 
+- *Mitigation:* Vector features local disk-backed buffers; if Redpanda is unreachable, Vector caches logs locally on the host disk, avoiding data loss during downstream outages.
+
+#### OpenTelemetry (OTel) Collector
+- **Role (Vai trò):** Aggregates traces and metrics from Beyla and synthetics. Performs tail-based sampling (retaining 100% of errors and high-latency traces while dropping normal 200 OK traces) to control storage costs.
+- **Outage Impact (Tác động khi sập):** Tail-based sampling and telemetry aggregation stop.
+- **Cascading Effect (Ảnh hưởng dây chuyền):** The telemetry ingestion path to Redpanda halts. Without the Collector's tail-based sampling, we would be forced to either store 100% of traces (exploding storage costs) or fall back to blind head-based sampling (losing error visibility).
+
+#### Blackbox Exporter (Uptime & Synthetics)
+- **Role (Vai trò):** Performs periodic synthetic HTTP/ping checks against service endpoints from an external perspective.
+- **Outage Impact (Tác động khi sập):** Loss of external availability and uptime measurements.
+- **Cascading Effect (Ảnh hưởng dây chuyền):** VictoriaMetrics receives no uptime metrics. Alertmanager cannot trigger high-priority alerts for external service outages.
+
+---
+
+### 2. Ingestion Buffer Tier (Tầng Đệm)
+
+#### Redpanda Cluster
+- **Role (Vai trò):** Serves as a high-throughput, multi-AZ replicated transaction log queue. Replicates incoming telemetry across 3 brokers before acknowledging writes, protecting downstream databases from volume spikes.
+- **Outage Impact (Tác động khi sập):** Transient buffering is disabled. Telemetry agents must write directly to storage backends.
+- **Cascading Effect (Ảnh hưởng dây chuyền):** Downstream databases (Loki, VictoriaMetrics, Tempo) are directly exposed to raw telemetry spikes (e.g. log storms during a DDoS). If a backend database goes offline for maintenance, telemetry is lost instantly. Redpanda acts as the buffer that allows up to 6 hours of database downtime without telemetry loss.
+
+---
+
+### 3. Storage & Analytics Tier (Tầng Lưu trữ & Phân tích)
+
+#### VictoriaMetrics (Metrics DB)
+- **Role (Vai trò):** Stores time-series infrastructure, application, and anomaly metrics. Supports PromQL for dashboard rendering and alerting rules.
+- **Outage Impact (Tác động khi sập):** Metric querying, dashboard graphing, and time-series alerts stop.
+- **Cascading Effect (Ảnh hưởng dây chuyền):** VictoriaMetrics `vmanomaly` cannot ingest training metrics. Alertmanager ceases evaluating metric threshold rules. Grafana displays empty dashboards.
+
+#### Grafana Loki (Logs DB)
+- **Role (Vai trò):** Index-free log database that categorizes logs using metadata labels and stores the compressed raw text chunks directly in AWS S3.
+- **Outage Impact (Tác động khi sập):** Log search, indexing, and log-based alerting stop.
+- **Cascading Effect (Ảnh hưởng dây chuyền):** On-call SREs cannot perform log-grep analysis. MTTR increases because engineers must log in directly to production servers to read local files.
+
+#### Grafana Tempo (Traces DB)
+- **Role (Vai trò):** Stores distributed transaction trace spans, backed by cheap AWS S3 storage.
+- **Outage Impact (Tác động khi sập):** Tracing search and service graph visualizations are unavailable.
+- **Cascading Effect (Ảnh hưởng dây chuyền):** Breaks the seamless "metrics-to-logs-to-traces" correlation on Grafana dashboards. Debugging cascading service-to-service failures becomes extremely difficult.
+
+#### VictoriaMetrics `vmanomaly` (AIOps Engine)
+- **Role (Vai trò):** Runs containerized Python ML models (Prophet/Isolation Forest) to establish baseline behaviors and detect metric deviations, pushing anomaly scores back to VictoriaMetrics.
+- **Outage Impact (Tác động khi sập):** Machine learning-driven anomaly detection is disabled.
+- **Cascading Effect (Ảnh hưởng dây chuyền):** The system must revert to static threshold alerting, exposing the SRE team to alert fatigue (alarms triggered by natural peak-hour traffic spikes).
+
+---
+
+### 4. Alerting & Remediation Tier (Tầng Cảnh báo & Tự sửa lỗi)
+
+#### Prometheus Alertmanager
+- **Role (Vai trò):** Collects alerts from Loki and VictoriaMetrics, performs grouping, deduplication, and suppression, and routes alerts to Keep/PagerDuty.
+- **Outage Impact (Tác động khi sập):** Alert routing and grouping are disabled.
+- **Cascading Effect (Ảnh hưởng dây chuyền):** No notifications are sent to Keep or PagerDuty. Engineers remain unaware of system outages until reported by customers.
+
+#### Keep (Remediation Engine)
+- **Role (Vai trò):** Intercepts Alertmanager webhooks, maps them to automated playbooks (e.g. disk cleanup, pod restarts), and executes them. Escalates to PagerDuty only if remediation fails.
+- **Outage Impact (Tác động khi sập):** Loss of self-healing automation.
+- **Cascading Effect (Ảnh hưởng dây chuyền):** Every minor alert (e.g. log disk full) triggers a PagerDuty incident, waking up on-call engineers for easily automated tasks.
+
+#### PagerDuty & Statuspage
+- **Role (Vai trò):** PagerDuty manages shift rotas and alerts humans via phone/SMS. Statuspage provides public status updates for external transparency.
+- **Outage Impact (Tác động khi sập):** Loss of urgent human notification paths.
+- **Cascading Effect (Ảnh hưởng dây chuyền):** Critical incidents that fail automated remediation remain unaddressed, violating SLA targets.
+
+---
+
+### 5. Visualization & Audit Tier (Tầng Tương tác con người)
+
+#### Grafana Cloud
+- **Role (Vai trò):** The unified query interface and single pane of glass for all metrics, logs, and traces.
+- **Outage Impact (Tác động khi sập):** Visual interface is unavailable.
+- **Cascading Effect (Ảnh hưởng dây chuyền):** Prevents engineers from accessing dashboards or searching telemetry during active incidents.
+
+#### AWS S3 / Athena
+- **Role (Vai trò):** S3 acts as the low-cost object storage for long-term retention blocks. Athena queries security logs in Parquet format.
+- **Outage Impact (Tác động khi sập):** Long-term historical archiving and audit log queries fail.
+- **Cascading Effect (Ảnh hưởng dây chuyền):** Forces database backends to store data on local EBS volumes, increasing AWS storage costs by 10-20x. The security team cannot query audit compliance reports.
+
