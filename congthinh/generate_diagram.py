@@ -79,7 +79,7 @@ with Diagram("Target Architecture (Observability Stack)", filename="image/archit
 
     with Cluster("Alerting & Self-Healing", graph_attr=attr_alert):
         alertmanager = Prometheus("\n\nAlertmanager")
-        keep = Server("\n\nKeep\n(Remediation)")
+        keep = Custom("\n\nKeep\n(Remediation)", get_img("keep.png")) if os.path.exists(get_img("keep.png")) else Server("\n\nKeep\n(Remediation)")
         pd = Pagerduty("\n\nPagerDuty")
 
     with Cluster("Visualization & Audit", graph_attr=attr_visual):
